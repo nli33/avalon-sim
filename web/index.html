@@ -34,7 +34,8 @@ header button:disabled { opacity: .4; cursor: default; }
   place-items: center; font-size: 12px; font-weight: 700; }
 .pip.ok { background: var(--good); border-color: var(--good); color: #fff; }
 .pip.fail { background: var(--bad); border-color: var(--bad); color: #fff; }
-#status { color: var(--muted); }
+#status, #viewnote { color: var(--muted); }
+.quiet { color: var(--muted); font-size: 12px; }
 #legend { display: flex; gap: 10px; font-size: 12px; color: var(--muted); }
 .sw { display: inline-block; width: 12px; height: 12px; border-radius: 3px; vertical-align: -2px; margin-right: 4px; }
 .sw.pub { background: var(--pub-bg); border: 2px solid var(--pub-line); }
@@ -63,6 +64,7 @@ header button:disabled { opacity: .4; cursor: default; }
 <body>
 <header>
   <select id="game" aria-label="Game"></select>
+  <select id="view" aria-label="View"></select>
   <div>
     <button id="first" title="First step">⏮</button>
     <button id="prev" title="Previous step (←)">◀</button>
@@ -79,9 +81,10 @@ header button:disabled { opacity: .4; cursor: default; }
   <span id="status"></span>
   <div id="legend">
     <span><i class="sw pub"></i>broadcast</span>
-    <span><i class="sw priv"></i>private thoughts</span>
-    <span><i class="sw evil"></i>evil channel</span>
+    <span id="lg-priv"><i class="sw priv"></i>private thoughts</span>
+    <span id="lg-evil"><i class="sw evil"></i>evil channel</span>
   </div>
+  <span id="viewnote"></span>
 </header>
 <main id="grid"></main>
 <script>
@@ -117,6 +120,23 @@ function buildSteps(evs) {
   return out;
 }
 
+// What the selected view may see: 'public' (default), 'god' (everything), or a player's name (their point of view).
+const view = () => $('view').value;
+const pov = () => players.find((p) => p.name === view());
+const revealed = () => steps.slice(0, cur + 1).some((s) => s.pub.some((e) => e.type === 'game_over'));
+const showAction = (a) => view() === 'god' || a.player === view();
+const showEvil = () => view() === 'god' || revealed() || pov()?.team === 'evil';
+
+function roleLabel(p) {
+  const v = view(), me = pov();
+  if (v === 'god' || revealed()) return { text: `${p.role} (${p.team})`, cls: 't-' + p.team };
+  if (!me) return { text: '', cls: '' };
+  if (p.name === v) return { text: `you: ${p.role} (${p.team})`, cls: 't-' + p.team };
+  for (const [label, names] of Object.entries(me.sees || {}))
+    if (names.includes(p.name)) return { text: label, cls: label === 'evil' ? 't-evil' : '' };
+  return { text: '', cls: '' };
+}
+
 function stepLabel(s) {
   if (s.setup) return 'start';
   const kind = s.actions.length ? s.actions[0].kind : (s.pub[0]?.type || '');
@@ -139,7 +159,7 @@ function privateText(a) {
 function renderCell(s, name) {
   const cell = el('div', 'cell');
   for (const a of s.actions) {
-    if (a.player !== name) continue;
+    if (a.player !== name || !showAction(a)) continue;
     const b = el('div', 'bubble priv clamp');
     b.title = 'click to expand';
     b.onclick = () => b.classList.toggle('clamp');
@@ -151,7 +171,7 @@ function renderCell(s, name) {
       const b = el('div', 'bubble pub');
       b.append(el('b', '', `proposes Q${ev.quest}.${ev.attempt}`), document.createTextNode(`[${ev.team.join(', ')}]\n${ev.say}`));
       cell.append(b);
-    } else if (ev.type === 'chat' && ev.player === name) {
+    } else if (ev.type === 'chat' && ev.player === name && (ev.vis !== 'evil' || showEvil())) {
       const b = el('div', 'bubble ' + (ev.vis === 'evil' ? 'evil' : 'pub'));
       b.append(el('b', '', ev.vis === 'evil' ? 'evil channel' : 'says'), document.createTextNode(ev.text));
       cell.append(b);
@@ -210,8 +230,8 @@ function render() {
   grid.style.gridTemplateColumns = `76px repeat(${players.length}, minmax(0, 1fr)) minmax(0, 1fr)`;
   grid.append(el('div', 'head', 'Step'));
   for (const p of players) {
-    const h = el('div', 'head', p.name);
-    h.append(el('small', 't-' + p.team, `${p.role} (${p.team})`));
+    const h = el('div', 'head', p.name), r = roleLabel(p);
+    if (r.text) h.append(el('small', r.cls, r.text));
     grid.append(h);
   }
   grid.append(el('div', 'head', 'Table'));
@@ -220,22 +240,24 @@ function render() {
     const no = el('div', 'cell stepno' + hl, `${i}\n${stepLabel(s)}${s.actions.length > 1 ? ' ∥' : ''}`);
     no.style.whiteSpace = 'pre-line';
     grid.append(no);
-    for (const p of players) {
-      const c = renderCell(s, p.name);
+    const cells = players.map((p) => renderCell(s, p.name)), t = renderTable(s);
+    if (![...cells, t].some((c) => c.childElementCount)) t.append(el('div', 'quiet', '(nothing public)'));
+    for (const c of [...cells, t]) {
       if (i === cur) c.classList.add('cur');
       grid.append(c);
     }
-    const t = renderTable(s);
-    if (i === cur) t.classList.add('cur');
-    grid.append(t);
   }
   renderBoard(cur);
+  $('lg-priv').hidden = view() === 'public';
+  $('lg-evil').hidden = !showEvil();
+  $('viewnote').textContent = view() === 'public' ? 'Public view: roles and private thoughts are hidden until the game ends'
+    : view() === 'god' ? 'Spectator view: everything is shown' : `Showing only what ${view()} can see`;
   $('scrub').value = cur;
   $('count').textContent = `step ${cur} / ${steps.length - 1}`;
   $('first').disabled = $('prev').disabled = cur === 0;
   $('next').disabled = $('last').disabled = cur === steps.length - 1;
   document.querySelector('.cur')?.scrollIntoView({ block: 'nearest' });
-  history.replaceState(null, '', `#game=${encodeURIComponent($('game').value)}&step=${cur}`);
+  history.replaceState(null, '', `#game=${encodeURIComponent($('game').value)}&view=${encodeURIComponent(view())}&step=${cur}`);
 }
 
 function go(n) {
@@ -260,9 +282,15 @@ async function load(id, step = 0) {
   events = text.split('\n').filter(Boolean).map((l) => JSON.parse(l));
   steps = buildSteps(events);
   players = steps[0]?.setup?.players || [];
+  const wanted = view() || startView;
+  $('view').replaceChildren(new Option('Public view', 'public'), new Option('Spectator (everything)', 'god'),
+    ...players.map((p) => new Option(`As ${p.name}`, p.name)));
+  $('view').value = ['public', 'god', ...players.map((p) => p.name)].includes(wanted) ? wanted : 'public';
   $('scrub').max = steps.length - 1;
   go(step);
 }
+
+let startView = 'public';
 
 async function init() {
   const games = await (await fetch('/api/games')).json();
@@ -270,11 +298,13 @@ async function init() {
   for (const g of games) sel.append(new Option(g, g));
   const hash = new URLSearchParams(location.hash.slice(1));
   if (hash.get('game') && games.includes(hash.get('game'))) sel.value = hash.get('game');
+  startView = hash.get('view') || 'public';
   if (games.length) await load(sel.value, +hash.get('step') || 0);
   else $('grid').append(el('div', '', 'No games found. Run `uv run avalon` first.'));
 }
 
 $('game').onchange = (e) => load(e.target.value);
+$('view').onchange = render;
 $('first').onclick = () => { stop(); go(0); };
 $('prev').onclick = () => { stop(); go(cur - 1); };
 $('next').onclick = () => { stop(); go(cur + 1); };
