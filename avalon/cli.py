@@ -17,12 +17,13 @@ console = Console(highlight=False)
 
 def show(ev, notes=True):
     t = ev["type"]
-    if t == "notes" and not notes:
+    if t == "action" and not notes:
         return
     if t == "setup":
         console.print("[bold]Roles[/bold] (spectator view): " + ", ".join(f'{p["name"]}={p["role"]}' for p in ev["players"]))
-    elif t == "notes":
-        console.print(f'  [dim]{ev["player"]} notes: {ev["notes"]}[/dim]')
+    elif t == "action":
+        if ev["output"].get("notes"):
+            console.print(f'  [dim]{ev["player"]} notes: {ev["output"]["notes"]}[/dim]')
     elif t == "fallback":
         console.print(f'  [red]fallback {ev["player"]} {ev["kind"]}: {ev["error"]}[/red]')
     elif t == "assassination":
@@ -42,9 +43,16 @@ def main():
     ap.add_argument("--model", help="override every player's model")
     ap.add_argument("--concurrency", type=int, default=3)
     ap.add_argument("--out", default="runs")
+    ap.add_argument("--serve", action="store_true", help="serve the web replay viewer for games in --out")
+    ap.add_argument("--port", type=int, default=8000)
     ap.add_argument("--replay", metavar="GAME.JSONL", help="print a saved game instead of running one")
     ap.add_argument("--no-notes", action="store_true", help="with --replay: hide players' private notes")
     args = ap.parse_args()
+
+    if args.serve:
+        from .server import serve
+        serve(args.out, args.port)
+        return
 
     if args.replay:
         for line in open(args.replay):

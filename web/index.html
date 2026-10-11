@@ -1,0 +1,296 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Avalon Replay</title>
+<style>
+:root {
+  --bg: #f6f6f4; --panel: #ffffff; --text: #1d1d1f; --muted: #6b6b70; --line: #dcdcd8;
+  --pub-bg: #e6f0ff; --pub-line: #2f6fdd; --pub-text: #0f2f66;
+  --priv-bg: #fff6df; --priv-line: #c58a00; --priv-text: #5c4300;
+  --evil-bg: #fde8e8; --evil-line: #c93a3a; --evil-text: #6b1616;
+  --table-bg: #efefec; --good: #1f7a4d; --bad: #b3261e; --hl: #fff3a8;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #161618; --panel: #1f1f22; --text: #ececee; --muted: #9a9aa2; --line: #333338;
+    --pub-bg: #16284a; --pub-line: #5b95f0; --pub-text: #d4e4ff;
+    --priv-bg: #3a2f10; --priv-line: #e0a82e; --priv-text: #f5e2b0;
+    --evil-bg: #4a1a1a; --evil-line: #ef6b6b; --evil-text: #ffd6d6;
+    --table-bg: #2a2a2e; --good: #5fd09a; --bad: #ff8a80; --hl: #4a4410;
+  }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.45 system-ui, sans-serif; }
+header { position: sticky; top: 0; z-index: 5; background: var(--panel); border-bottom: 1px solid var(--line);
+  padding: 8px 16px; display: flex; flex-wrap: wrap; gap: 12px 20px; align-items: center; }
+header select, header button { font: inherit; padding: 4px 10px; border: 1px solid var(--line);
+  border-radius: 6px; background: var(--bg); color: var(--text); cursor: pointer; }
+header button:disabled { opacity: .4; cursor: default; }
+#scrub { flex: 1 1 200px; min-width: 120px; }
+#board { display: flex; gap: 6px; align-items: center; }
+.pip { width: 22px; height: 22px; border-radius: 50%; border: 2px solid var(--line); display: grid;
+  place-items: center; font-size: 12px; font-weight: 700; }
+.pip.ok { background: var(--good); border-color: var(--good); color: #fff; }
+.pip.fail { background: var(--bad); border-color: var(--bad); color: #fff; }
+#status { color: var(--muted); }
+#legend { display: flex; gap: 10px; font-size: 12px; color: var(--muted); }
+.sw { display: inline-block; width: 12px; height: 12px; border-radius: 3px; vertical-align: -2px; margin-right: 4px; }
+.sw.pub { background: var(--pub-bg); border: 2px solid var(--pub-line); }
+.sw.priv { background: var(--priv-bg); border: 2px dashed var(--priv-line); }
+.sw.evil { background: var(--evil-bg); border: 2px solid var(--evil-line); }
+#grid { display: grid; gap: 0; padding: 0 16px 80px; min-width: 900px; }
+.cell { padding: 6px; border-bottom: 1px solid var(--line); min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+.head { position: sticky; top: var(--hh, 56px); z-index: 4; background: var(--panel); font-weight: 600; padding: 8px 6px;
+  border-bottom: 2px solid var(--line); }
+.head small { display: block; font-weight: 500; }
+.head .t-good { color: var(--good); } .head .t-evil { color: var(--bad); }
+.stepno { color: var(--muted); font-size: 12px; padding-top: 10px; }
+.cur { background: var(--hl); }
+.bubble { border-radius: 8px; padding: 6px 9px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.bubble b { font-size: 11px; text-transform: uppercase; letter-spacing: .04em; display: block; opacity: .8; }
+.pub { background: var(--pub-bg); border: 2px solid var(--pub-line); color: var(--pub-text); }
+.priv { background: var(--priv-bg); border: 2px dashed var(--priv-line); color: var(--priv-text); font-style: italic; cursor: pointer; }
+.priv.clamp { display: -webkit-box; -webkit-line-clamp: 7; -webkit-box-orient: vertical; overflow: hidden; }
+.evil { background: var(--evil-bg); border: 2px solid var(--evil-line); color: var(--evil-text); }
+.table { background: var(--table-bg); border: 1px solid var(--line); }
+.chip { display: inline-block; font-weight: 700; padding: 0 6px; border-radius: 4px; }
+.approve, .success { color: var(--good); } .reject, .fail { color: var(--bad); }
+#empty { padding: 40px; color: var(--muted); }
+</style>
+</head>
+<body>
+<header>
+  <select id="game" aria-label="Game"></select>
+  <div>
+    <button id="first" title="First step">⏮</button>
+    <button id="prev" title="Previous step (←)">◀</button>
+    <button id="play" title="Play / pause (space)">▶ Play</button>
+    <button id="next" title="Next step (→)">▶|</button>
+    <button id="last" title="Last step">⏭</button>
+  </div>
+  <select id="speed" aria-label="Playback speed">
+    <option value="3000">slow</option><option value="1500" selected>normal</option><option value="600">fast</option>
+  </select>
+  <input id="scrub" type="range" min="0" value="0">
+  <span id="count"></span>
+  <div id="board"></div>
+  <span id="status"></span>
+  <div id="legend">
+    <span><i class="sw pub"></i>broadcast</span>
+    <span><i class="sw priv"></i>private thoughts</span>
+    <span><i class="sw evil"></i>evil channel</span>
+  </div>
+</header>
+<main id="grid"></main>
+<script>
+let events = [], steps = [], players = [], cur = 0, timer = null;
+const $ = (id) => document.getElementById(id);
+
+function el(tag, cls, text) {
+  const e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (text !== undefined) e.textContent = text;
+  return e;
+}
+
+// A step is one group of agent decisions (parallel ones share a group) plus the public events that follow it.
+function buildSteps(evs) {
+  const out = [];
+  let step = null, pending = [];
+  const add = (s) => { s.fallbacks = pending; pending = []; out.push(step = s); };
+  for (const ev of evs) {
+    if (ev.type === 'setup') add({ setup: ev, group: null, actions: [], pub: [] });
+    else if (ev.type === 'action') {
+      if (!step || step.group !== ev.group) add({ group: ev.group, actions: [], pub: [] });
+      step.actions.push(ev);
+    } else if (ev.type === 'fallback') {
+      // an agent-error fallback precedes its action; an invalid-output fallback follows it
+      const own = step && step.actions.some((a) => a.player === ev.player && a.kind === ev.kind);
+      (own ? step.fallbacks : pending).push(ev);
+    } else {
+      if (!step) add({ group: null, actions: [], pub: [] });
+      step.pub.push(ev);
+    }
+  }
+  return out;
+}
+
+function stepLabel(s) {
+  if (s.setup) return 'start';
+  const kind = s.actions.length ? s.actions[0].kind : (s.pub[0]?.type || '');
+  return { discuss: 'discuss', propose: 'propose', vote: 'vote', quest: 'quest', evil_chat: 'evil chat',
+           assassinate: 'assassinate' }[kind] || kind;
+}
+
+function privateText(a) {
+  const o = a.output, lines = [];
+  if (a.kind === 'quest' && o.card) lines.push(`plays ${o.card.toUpperCase()}`);
+  if (a.kind === 'vote' && o.vote) lines.push(`votes ${o.vote}`);
+  if (a.kind === 'propose' && o.team) lines.push(`picks ${o.team.join(', ')}`);
+  if (a.kind === 'assassinate' && o.target) lines.push(`targets ${o.target}`);
+  const thought = o.notes || o.reasoning;
+  if (thought) lines.push(thought);
+  if (!Object.keys(o).length) lines.push('(agent call failed, engine used a default)');
+  return lines.join('\n');
+}
+
+function renderCell(s, name) {
+  const cell = el('div', 'cell');
+  for (const a of s.actions) {
+    if (a.player !== name) continue;
+    const b = el('div', 'bubble priv clamp');
+    b.title = 'click to expand';
+    b.onclick = () => b.classList.toggle('clamp');
+    b.append(el('b', '', 'private'), document.createTextNode(privateText(a)));
+    cell.append(b);
+  }
+  for (const ev of s.pub) {
+    if (ev.type === 'proposal' && ev.leader === name) {
+      const b = el('div', 'bubble pub');
+      b.append(el('b', '', `proposes Q${ev.quest}.${ev.attempt}`), document.createTextNode(`[${ev.team.join(', ')}]\n${ev.say}`));
+      cell.append(b);
+    } else if (ev.type === 'chat' && ev.player === name) {
+      const b = el('div', 'bubble ' + (ev.vis === 'evil' ? 'evil' : 'pub'));
+      b.append(el('b', '', ev.vis === 'evil' ? 'evil channel' : 'says'), document.createTextNode(ev.text));
+      cell.append(b);
+    } else if (ev.type === 'vote_result' && ev.votes[name]) {
+      const b = el('div', 'bubble pub');
+      b.append(el('b', '', 'vote (public)'), el('span', 'chip ' + ev.votes[name], ev.votes[name]));
+      cell.append(b);
+    }
+  }
+  return cell;
+}
+
+function renderTable(s) {
+  const cell = el('div', 'cell');
+  for (const ev of s.pub) {
+    let text = null;
+    if (ev.type === 'vote_result') {
+      const yes = Object.values(ev.votes).filter((v) => v === 'approve').length;
+      text = `Team [${ev.team.join(', ')}] ${ev.approved ? 'APPROVED' : 'REJECTED'} ${yes}-${Object.keys(ev.votes).length - yes}`;
+    } else if (ev.type === 'quest_result') {
+      text = `Quest ${ev.quest} ${ev.success ? 'SUCCEEDED' : 'FAILED'} (${ev.fails} fail card${ev.fails === 1 ? '' : 's'}) team [${ev.team.join(', ')}]`;
+    } else if (ev.type === 'assassination') {
+      text = `${ev.assassin} assassinates ${ev.target}: ${ev.correct ? 'CORRECT' : 'wrong'}`;
+    } else if (ev.type === 'game_over') {
+      text = `${ev.winner.toUpperCase()} WINS: ${ev.reason}`;
+    }
+    if (text) { const b = el('div', 'bubble table'); b.textContent = text; cell.append(b); }
+  }
+  if (s.setup) cell.append(el('div', 'bubble table', `Seed ${s.setup.seed}. First leader: ${s.setup.leader}.`));
+  for (const f of s.fallbacks) cell.append(el('div', 'bubble table', `fallback (${f.player}, ${f.kind}): ${f.error}`));
+  return cell;
+}
+
+function renderBoard(upto) {
+  const board = $('board');
+  board.replaceChildren();
+  const results = [];
+  let proposal = null, over = null;
+  for (let i = 0; i <= upto; i++) for (const ev of steps[i].pub) {
+    if (ev.type === 'quest_result') results.push(ev.success);
+    if (ev.type === 'proposal') proposal = ev;
+    if (ev.type === 'game_over') over = ev;
+  }
+  for (let i = 0; i < 5; i++) {
+    const r = results[i];
+    board.append(el('span', 'pip ' + (r === undefined ? '' : r ? 'ok' : 'fail'), r === undefined ? i + 1 : r ? '✓' : '✗'));
+  }
+  $('status').textContent = over ? `${over.winner.toUpperCase()} wins` :
+    proposal ? `Q${proposal.quest} attempt ${proposal.attempt} · leader ${proposal.leader}` : '';
+}
+
+function render() {
+  const grid = $('grid');
+  grid.replaceChildren();
+  if (!steps.length) { grid.append(el('div', '', 'No game loaded.')); return; }
+  grid.style.gridTemplateColumns = `76px repeat(${players.length}, minmax(0, 1fr)) minmax(0, 1fr)`;
+  grid.append(el('div', 'head', 'Step'));
+  for (const p of players) {
+    const h = el('div', 'head', p.name);
+    h.append(el('small', 't-' + p.team, `${p.role} (${p.team})`));
+    grid.append(h);
+  }
+  grid.append(el('div', 'head', 'Table'));
+  for (let i = 0; i <= cur; i++) {
+    const s = steps[i], hl = i === cur ? ' cur' : '';
+    const no = el('div', 'cell stepno' + hl, `${i}\n${stepLabel(s)}${s.actions.length > 1 ? ' ∥' : ''}`);
+    no.style.whiteSpace = 'pre-line';
+    grid.append(no);
+    for (const p of players) {
+      const c = renderCell(s, p.name);
+      if (i === cur) c.classList.add('cur');
+      grid.append(c);
+    }
+    const t = renderTable(s);
+    if (i === cur) t.classList.add('cur');
+    grid.append(t);
+  }
+  renderBoard(cur);
+  $('scrub').value = cur;
+  $('count').textContent = `step ${cur} / ${steps.length - 1}`;
+  $('first').disabled = $('prev').disabled = cur === 0;
+  $('next').disabled = $('last').disabled = cur === steps.length - 1;
+  document.querySelector('.cur')?.scrollIntoView({ block: 'nearest' });
+  history.replaceState(null, '', `#game=${encodeURIComponent($('game').value)}&step=${cur}`);
+}
+
+function go(n) {
+  cur = Math.max(0, Math.min(steps.length - 1, n));
+  if (cur === steps.length - 1) stop();
+  render();
+}
+
+function stop() { clearInterval(timer); timer = null; $('play').textContent = '▶ Play'; }
+
+function togglePlay() {
+  if (timer) return stop();
+  if (cur === steps.length - 1) cur = 0;
+  $('play').textContent = '⏸ Pause';
+  timer = setInterval(() => go(cur + 1), +$('speed').value);
+  go(cur + 1);
+}
+
+async function load(id, step = 0) {
+  stop();
+  const text = await (await fetch('/api/games/' + encodeURIComponent(id))).text();
+  events = text.split('\n').filter(Boolean).map((l) => JSON.parse(l));
+  steps = buildSteps(events);
+  players = steps[0]?.setup?.players || [];
+  $('scrub').max = steps.length - 1;
+  go(step);
+}
+
+async function init() {
+  const games = await (await fetch('/api/games')).json();
+  const sel = $('game');
+  for (const g of games) sel.append(new Option(g, g));
+  const hash = new URLSearchParams(location.hash.slice(1));
+  if (hash.get('game') && games.includes(hash.get('game'))) sel.value = hash.get('game');
+  if (games.length) await load(sel.value, +hash.get('step') || 0);
+  else $('grid').append(el('div', '', 'No games found. Run `uv run avalon` first.'));
+}
+
+$('game').onchange = (e) => load(e.target.value);
+$('first').onclick = () => { stop(); go(0); };
+$('prev').onclick = () => { stop(); go(cur - 1); };
+$('next').onclick = () => { stop(); go(cur + 1); };
+$('last').onclick = () => { stop(); go(steps.length - 1); };
+$('play').onclick = togglePlay;
+$('scrub').oninput = (e) => { stop(); go(+e.target.value); };
+$('speed').onchange = () => { if (timer) { stop(); togglePlay(); } };
+document.addEventListener('keydown', (e) => {
+  if (e.target.tagName === 'SELECT') return;
+  if (e.key === 'ArrowRight') { stop(); go(cur + 1); }
+  else if (e.key === 'ArrowLeft') { stop(); go(cur - 1); }
+  else if (e.key === ' ') { e.preventDefault(); togglePlay(); }
+});
+new ResizeObserver(([e]) => document.documentElement.style.setProperty('--hh', e.target.offsetHeight + 'px'))
+  .observe(document.querySelector('header'));
+init();
+</script>
+</body>
+</html>

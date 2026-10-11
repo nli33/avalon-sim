@@ -94,3 +94,20 @@ def test_agent_exception_falls_back(cfg):
         raise RuntimeError("boom")
     game, result = play(cfg, Scripted(discuss=boom))
     assert any(e["type"] == "fallback" for e in game.events)
+
+
+def test_actions_logged_with_parallel_groups(cfg):
+    game, _ = play(cfg, RandomAgent(0))
+    actions = [e for e in game.events if e["type"] == "action"]
+    assert len(actions) == game.calls
+    for kind, size in (("vote", len(game.players)),):
+        groups = {}
+        for a in actions:
+            if a["kind"] == kind:
+                groups.setdefault(a["group"], []).append(a["player"])
+        assert groups and all(len(v) == size for v in groups.values())
+    cards = [a for a in actions if a["kind"] == "quest"]
+    assert cards and all(a["output"]["card"] in ("success", "fail") for a in cards)
+    # every other decision is its own group
+    others = [a["group"] for a in actions if a["kind"] not in ("vote", "quest")]
+    assert len(others) == len(set(others))

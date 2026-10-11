@@ -43,6 +43,7 @@ class Game:
         self.rejects = 0
         self.results = []  # True = quest succeeded
         self.calls = 0
+        self.groups = 0  # decisions made in parallel share a group id
         self.log = open(log_path, "w") if log_path else None
 
     def emit(self, type, vis, **data):
@@ -54,8 +55,13 @@ class Game:
         if self.on_event:
             self.on_event(ev)
 
-    async def ask(self, player, kind, instruction, size=0, cards=("success", "fail")):
+    def new_group(self):
+        self.groups += 1
+        return self.groups
+
+    async def ask(self, player, kind, instruction, size=0, cards=("success", "fail"), group=None):
         """One agent decision. Returns the agent's dict, or {} if the call failed."""
+        group = group or self.new_group()
         system, prompt = views.build_view(self, player, instruction)
         req = {"kind": kind, "player": player.name, "model": player.model, "system": system, "prompt": prompt,
                "schema": schema(kind, self.names, cards),
@@ -65,10 +71,11 @@ class Game:
             out = await self.agent.act(req)
         except Exception as e:
             self.emit("fallback", "hidden", player=player.name, kind=kind, error=str(e))
+            self.emit("action", "hidden", player=player.name, kind=kind, group=group, output={})
             return {}
         if out.get("notes") is not None:
             self.notes[player.name] = str(out["notes"])
-            self.emit("notes", "hidden", player=player.name, notes=self.notes[player.name])
+        self.emit("action", "hidden", player=player.name, kind=kind, group=group, output=out)
         return out
 
     def seat(self, start):
@@ -115,7 +122,8 @@ class Game:
                     await self.chat(p, "discuss", f"Discuss the proposed team {team}. Say what you think in 1-3 "
                                     "sentences, or say nothing.")
 
-            outs = await asyncio.gather(*(self.ask(p, "vote", f"Vote on the proposed team {team}.")
+            g = self.new_group()
+            outs = await asyncio.gather(*(self.ask(p, "vote", f"Vote on the proposed team {team}.", group=g)
                                           for p in self.players))
             votes = {p.name: ("reject" if o.get("vote") == "reject" else "approve") for p, o in zip(self.players, outs)}
             approved = sum(v == "approve" for v in votes.values()) * 2 > n
@@ -130,8 +138,9 @@ class Game:
                 continue
 
             members = [p for p in self.players if p.name in team]
+            g = self.new_group()
             outs = await asyncio.gather(*(
-                self.ask(p, "quest", "You are on the quest. Play your card.",
+                self.ask(p, "quest", "You are on the quest. Play your card.", group=g,
                          cards=("success", "fail") if p.team == "evil" else ("success",)) for p in members))
             fails = sum(p.team == "evil" and o.get("card") == "fail" for p, o in zip(members, outs))
             ok = fails < cfg.fails_required[self.quest]
