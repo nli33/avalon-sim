@@ -12,7 +12,11 @@ class RandomAgent:
 
     async def act(self, req):
         kind, ctx = req["kind"], req["ctx"]
-        if kind in ("discuss", "evil_chat"):
+        if kind == "discuss":
+            others = [n for n in ctx["names"] if n != req["player"]]
+            return {"notes": "random", "say": self.rng.choice(["Sounds fine to me.", "I'm not sure about this.", "Thoughts?"]),
+                    "ask_to": self.rng.choice(["", "", *others]), "ready_to_vote": self.rng.random() < 0.6}
+        if kind == "evil_chat":
             return {"say": self.rng.choice(["Sounds fine to me.", "I'm not sure about this.", ""]), "notes": "random"}
         if kind == "propose":
             return {"team": self.rng.sample(ctx["names"], ctx["size"]), "say": "My pick.", "notes": "random"}

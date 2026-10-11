@@ -22,13 +22,19 @@ class PlayerCfg(BaseModel):
     model: str | None = None
 
 
+class Discussion(BaseModel):
+    min_turns: int = 1  # every player speaks at least this often before the vote
+    max_turns: int = 3  # proactive turns per player per proposal
+    question_examples: list[str] = []
+
+
 class Config(BaseModel):
     roles: dict[str, Role]
     assassination_target: str
     quest_sizes: list[int]
     fails_required: list[int]
     max_rejections: int = 5
-    discussion_rounds: int = 1
+    discussion: Discussion = Discussion()
     assassination_discussion_rounds: int = 2
     default_model: str = "sonnet"
     players: list[PlayerCfg]
@@ -47,6 +53,8 @@ class Config(BaseModel):
             raise ValueError("unknown assassination_target")
         if sum(r.can_assassinate for r in self.roles.values()) != 1:
             raise ValueError("exactly one role must have can_assassinate")
+        if not 1 <= self.discussion.min_turns <= self.discussion.max_turns:
+            raise ValueError("need 1 <= discussion.min_turns <= discussion.max_turns")
         if len(self.fails_required) != len(self.quest_sizes):
             raise ValueError("fails_required and quest_sizes differ in length")
         if max(self.quest_sizes) > len(self.players):

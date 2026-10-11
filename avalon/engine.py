@@ -14,17 +14,19 @@ class Player:
     model: str
 
 
-def schema(kind, names=(), cards=("success", "fail")):
+def schema(kind, names=(), cards=("success", "fail"), me=None):
+    """Output schema per decision. Private reasoning (notes) comes first so it is written before the decision."""
     s = lambda: {"type": "string"}
-    notes = {"type": "string", "description": "Private notes to your future self, in the first person. The other "
-             "players are everyone except you."}
+    notes = {"type": "string", "description": "Your private reasoning and memory; no other player sees it. Think here "
+             "before you decide. First person; the other players are everyone except you."}
     props = {
-        "discuss": {"say": s(), "notes": notes},
-        "evil_chat": {"say": s(), "notes": notes},
-        "propose": {"team": {"type": "array", "items": {"enum": list(names)}}, "say": s(), "notes": notes},
-        "vote": {"vote": {"enum": ["approve", "reject"]}, "notes": notes},
-        "quest": {"card": {"enum": list(cards)}, "notes": notes},
-        "assassinate": {"target": {"enum": list(names)}, "reasoning": s()},
+        "discuss": {"notes": notes, "say": s(),
+                    "ask_to": {"enum": [""] + [n for n in names if n != me]}, "ready_to_vote": {"type": "boolean"}},
+        "evil_chat": {"notes": notes, "say": s()},
+        "propose": {"notes": notes, "team": {"type": "array", "items": {"enum": list(names)}}, "say": s()},
+        "vote": {"notes": notes, "vote": {"enum": ["approve", "reject"]}},
+        "quest": {"notes": notes, "card": {"enum": list(cards)}},
+        "assassinate": {"reasoning": s(), "target": {"enum": list(names)}},
     }[kind]
     return {"type": "object", "properties": props, "required": list(props), "additionalProperties": False}
 
@@ -66,7 +68,7 @@ class Game:
         group = group or self.new_group()
         system, prompt = views.build_view(self, player, instruction)
         req = {"kind": kind, "player": player.name, "model": player.model, "system": system, "prompt": prompt,
-               "schema": schema(kind, self.names, cards),
+               "schema": schema(kind, self.names, cards, player.name),
                "ctx": {"names": self.names, "size": size, "cards": list(cards)}}
         self.calls += 1
         try:
@@ -85,13 +87,71 @@ class Game:
         n = len(self.players)
         return [self.players[(start + i) % n] for i in range(n)]
 
-    async def chat(self, player, kind, instruction):
-        out = await self.ask(player, kind, instruction)
+    async def chat(self, player, instruction):
+        """One message in the evil channel."""
+        out = await self.ask(player, "evil_chat", instruction)
         text = str(out.get("say") or "").strip()
-        if text and kind == "discuss":
-            self.emit("chat", "public", player=player.name, text=text, quest=self.quest + 1, attempt=self.rejects + 1)
-        elif text:
+        if text:
             self.emit("chat", "evil", player=player.name, text=text)
+
+    async def discuss(self, team, leader):
+        """Free-flowing discussion after a proposal. The engine picks every speaker: a player who has been asked a
+        question speaks next (and nobody else), otherwise the players who have spoken least go first."""
+        cfg = self.cfg.discussion
+        seat = {p.name: i for i, p in enumerate(self.seat(self.leader + 1))}
+        turns = {n: 0 for n in self.names}
+        last = {n: -1 for n in self.names}
+        last[leader.name] = 0  # the proposal counts as the leader's latest message
+        ready = {n: False for n in self.names}
+        pending = None  # (asked player, asker, question text); at most one, since the asked player speaks next
+        step = 0
+        while True:
+            if pending:
+                speaker, question = next(p for p in self.players if p.name == pending[0]), pending
+                pending = None
+            else:
+                pool = [p for p in self.players if turns[p.name] < cfg.min_turns]
+                pool = pool or [p for p in self.players if not ready[p.name] and turns[p.name] < cfg.max_turns]
+                if not pool:
+                    return
+                speaker = min(pool, key=lambda p: (turns[p.name], last[p.name], seat[p.name]))
+                question = None
+            step += 1
+            name = speaker.name
+            out = await self.ask(speaker, "discuss", self.discussion_prompt(speaker, team, turns, question))
+            turns[name] += 1
+            last[name] = step
+            ready[name] = out.get("ready_to_vote", True) is not False  # a failed call counts as ready
+            said = text = str(out.get("say") or "").strip()
+            if question and not text:
+                text = "(no answer)"
+                self.emit("fallback", "hidden", player=name, kind="discuss", error="asked a question but said nothing")
+            target = str(out.get("ask_to") or "")
+            if target and not (said and target in self.names and target != name and turns[name] <= cfg.max_turns):
+                self.emit("fallback", "hidden", player=name, kind="discuss", error=f"ignored ask_to {target!r}")
+                target = ""
+            if target:
+                pending = (target, name, text)
+            if text:
+                self.emit("chat", "public", player=name, text=text, to=target or None,
+                          reply_to=question[1] if question else None, quest=self.quest + 1, attempt=self.rejects + 1)
+
+    def discussion_prompt(self, speaker, team, turns, question):
+        cfg = self.cfg.discussion
+        lines = [f"Discussion on the proposed team {', '.join(team)}. Turns taken so far: "
+                 + ", ".join(f"{n} {t}" for n, t in turns.items()) + f". You have used {turns[speaker.name]} of "
+                 f"{cfg.max_turns} turns."]
+        if question:
+            lines.append(f'{question[1]} asked you directly and it is your turn to answer: "{question[2]}"')
+        lines.append("Write your private reasoning in notes first. Then, in say, write your public message (1-3 "
+                     "sentences; leave it empty to stay silent). To direct a question at one other player, put their "
+                     "name in ask_to: they speak next and must answer. You cannot ask a question once you are past "
+                     "your turn limit. Set ready_to_vote to true when you are ready to vote. The discussion ends "
+                     "when everyone has spoken and every player is ready to vote, or when turns run out.")
+        if cfg.question_examples:
+            lines.append("Some question formats (illustrative, not exhaustive; replace X, Y, Z with player names):")
+            lines += [f"- {q}" for q in cfg.question_examples]
+        return "\n".join(lines)
 
     async def run(self):
         cfg, n = self.cfg, len(self.players)
@@ -119,10 +179,7 @@ class Game:
             self.emit("proposal", "public", quest=self.quest + 1, attempt=self.rejects + 1, leader=leader.name,
                       team=team, say=str(out.get("say") or "").strip())
 
-            for _ in range(cfg.discussion_rounds):
-                for p in self.seat(self.leader + 1):
-                    await self.chat(p, "discuss", f"Discuss the proposed team {team}. Say what you think in 1-3 "
-                                    "sentences, or say nothing.")
+            await self.discuss(team, leader)
 
             g = self.new_group()
             outs = await asyncio.gather(*(self.ask(p, "vote", f"Vote on the proposed team {team}.", group=g)
@@ -162,7 +219,7 @@ class Game:
         assassin = next(p for p in self.players if self.cfg.roles[p.role].can_assassinate)
         for _ in range(self.cfg.assassination_discussion_rounds):
             for p in evil:
-                await self.chat(p, "evil_chat", "Good completed three quests. Discuss privately with your evil "
+                await self.chat(p, "Good completed three quests. Discuss privately with your evil "
                                 "teammates who Merlin is, in 1-3 sentences.")
         out = await self.ask(assassin, "assassinate", f"Good won three quests. Name the one player you believe is "
                              f"{self.cfg.assassination_target}.")

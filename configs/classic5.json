@@ -31,7 +31,14 @@
   "quest_sizes": [2, 3, 2, 3, 3],
   "fails_required": [1, 1, 1, 1, 1],
   "max_rejections": 5,
-  "discussion_rounds": 1,
+  "discussion": {
+    "min_turns": 1,
+    "max_turns": 3,
+    "question_examples": [
+      "What do you think about a team containing [X, Y, Z]?",
+      "If this quest fails, who would you propose for the next team?"
+    ]
+  },
   "assassination_discussion_rounds": 2,
   "default_model": "sonnet",
   "players": [

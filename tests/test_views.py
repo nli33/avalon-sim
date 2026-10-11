@@ -66,3 +66,22 @@ def test_assassination_phase_is_stated(game):
     game.quest = 4
     _, prompt = build_view(game, game.players[0], "x")
     assert "assassination phase" in prompt and "Quest 5 of 5" not in prompt
+
+
+def test_directed_chat_is_rendered_and_question_goes_to_asked_player(game):
+    game.emit("chat", "public", player="Alice", text="Bob, who would you pick?", to="Bob", reply_to=None, quest=1, attempt=1)
+    game.emit("chat", "public", player="Bob", text="Cara.", to=None, reply_to="Alice", quest=1, attempt=1)
+    _, prompt = build_view(game, game.players[1], "x")  # Bob
+    assert 'Alice -> Bob (you): "Bob, who would you pick?"' in prompt
+    assert 'Bob (you) (answering Alice): "Cara."' in prompt
+    bob = game.players[1]
+    text = game.discussion_prompt(bob, ["Alice", "Bob"], {n: 0 for n in game.names}, ("Bob", "Alice", "who would you pick?"))
+    assert 'Alice asked you directly' in text
+    assert "asked you directly" not in game.discussion_prompt(game.players[0], ["Alice"], {n: 0 for n in game.names}, None)
+
+
+def test_question_examples_come_from_config(game):
+    prompt = lambda: game.discussion_prompt(game.players[0], ["Alice"], {n: 0 for n in game.names}, None)
+    assert "who would you propose" in prompt()
+    game.cfg.discussion.question_examples = []
+    assert "who would you propose" not in prompt()

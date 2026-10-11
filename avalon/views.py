@@ -24,7 +24,9 @@ def render(ev, viewer=None):
         return f'{q} {me(ev["leader"])} proposes team {", ".join(map(me, ev["team"]))}: "{ev["say"]}"'
     if t == "chat":
         prefix = "(private evil channel) " if ev["vis"] == "evil" else ""
-        return f'{q} {prefix}{me(ev["player"])}: "{ev["text"]}"'.strip()
+        to = f' -> {me(ev["to"])}' if ev.get("to") else ""
+        reply = f' (answering {me(ev["reply_to"])})' if ev.get("reply_to") else ""
+        return f'{q} {prefix}{me(ev["player"])}{to}{reply}: "{ev["text"]}"'.strip()
     if t == "vote_result":
         yes = [me(k) for k, v in ev["votes"].items() if v == "approve"]
         no = [me(k) for k, v in ev["votes"].items() if v == "reject"]
@@ -50,7 +52,7 @@ def build_view(game, player, instruction):
     system = f"""You are {player.name}, playing Avalon (The Resistance) with {len(game.players)} players in seat order: {seats}.
 
 Rules:
-- Each round the leader proposes a team, everyone discusses, then everyone votes publicly. A strict majority approves. The leader rotates every proposal. If {cfg.max_rejections} teams in a row are rejected, evil wins.
+- Each round the leader proposes a team. Players then discuss. On your turn you can say something and direct one question at another player, who then speaks next and must answer it. Discussion ends once everyone has spoken and every player says they are ready to vote (or after {cfg.discussion.max_turns} turns each). Then everyone votes publicly. A strict majority approves. The leader rotates every proposal. If {cfg.max_rejections} teams in a row are rejected, evil wins.
 - Team members secretly play success or fail. Only the number of fail cards is revealed, never who played them. Good players can only play success.
 - Quest team sizes: {cfg.quest_sizes}. Fail cards needed to fail each quest: {cfg.fails_required}.
 - Good wins by completing {need} quests, but then the {assassin_role} gets one guess at who the {cfg.assassination_target} is; a correct guess means evil wins instead. Evil wins by failing {need} quests, by {cfg.max_rejections} rejections in a row, or by a correct assassination.
