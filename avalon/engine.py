@@ -20,8 +20,14 @@ def schema(kind, names=(), cards=("success", "fail"), me=None):
     notes = {"type": "string", "description": "Your private reasoning and memory; no other player sees it. Think here "
              "before you decide. First person; the other players are everyone except you."}
     props = {
-        "discuss": {"notes": notes, "say": s(),
-                    "ask_to": {"enum": [""] + [n for n in names if n != me]}, "ready_to_vote": {"type": "boolean"}},
+        "discuss": {"notes": notes,
+                    "say": {"type": "string", "description": "Your public message to the whole table (1-3 sentences). "
+                            "If you were asked a question, answer it here. May be empty."},
+                    "ask_to": {"enum": [""] + [n for n in names if n != me],
+                               "description": "The one player you direct a question at, or empty."},
+                    "question": {"type": "string", "description": "The question for ask_to, addressed to them. "
+                                 "Empty if ask_to is empty."},
+                    "ready_to_vote": {"type": "boolean"}},
         "evil_chat": {"notes": notes, "say": s()},
         "propose": {"notes": notes, "team": {"type": "array", "items": {"enum": list(names)}}, "say": s()},
         "vote": {"notes": notes, "vote": {"enum": ["approve", "reject"]}},
@@ -122,18 +128,18 @@ class Game:
             turns[name] += 1
             last[name] = step
             ready[name] = out.get("ready_to_vote", True) is not False  # a failed call counts as ready
-            said = text = str(out.get("say") or "").strip()
+            text = str(out.get("say") or "").strip()
             if question and not text:
                 text = "(no answer)"
                 self.emit("fallback", "hidden", player=name, kind="discuss", error="asked a question but said nothing")
-            target = str(out.get("ask_to") or "")
-            if target and not (said and target in self.names and target != name and turns[name] <= cfg.max_turns):
+            target, ask = str(out.get("ask_to") or ""), str(out.get("question") or "").strip()
+            if target and not (ask and target in self.names and target != name and turns[name] <= cfg.max_turns):
                 self.emit("fallback", "hidden", player=name, kind="discuss", error=f"ignored ask_to {target!r}")
                 target = ""
             if target:
-                pending = (target, name, text)
-            if text:
-                self.emit("chat", "public", player=name, text=text, to=target or None,
+                pending = (target, name, ask)
+            if text or target:
+                self.emit("chat", "public", player=name, text=text, to=target or None, question=ask if target else None,
                           reply_to=question[1] if question else None, quest=self.quest + 1, attempt=self.rejects + 1)
 
     def discussion_prompt(self, speaker, team, turns, question):
@@ -143,11 +149,14 @@ class Game:
                  f"{cfg.max_turns} turns."]
         if question:
             lines.append(f'{question[1]} asked you directly and it is your turn to answer: "{question[2]}"')
-        lines.append("Write your private reasoning in notes first. Then, in say, write your public message (1-3 "
-                     "sentences; leave it empty to stay silent). To direct a question at one other player, put their "
-                     "name in ask_to: they speak next and must answer. You cannot ask a question once you are past "
-                     "your turn limit. Set ready_to_vote to true when you are ready to vote. The discussion ends "
-                     "when everyone has spoken and every player is ready to vote, or when turns run out.")
+        lines.append("Write your private reasoning in notes first. Then, in say, write your public message to the "
+                     "table (1-3 sentences; leave it empty to stay silent), including your answer if you were asked "
+                     "something. To ask one other player a question, put their name in ask_to and the question "
+                     "itself in question only, not in say: they speak next and must answer it. You cannot ask a question once you are "
+                     "past your turn limit. Set ready_to_vote to true when you are ready to vote. The discussion "
+                     "ends when everyone has spoken and every player is ready to vote, or when turns run out.")
+        lines.append("A question that asks the other player to commit to something concrete (a name, a team, a vote) "
+                     "is easier to answer and can be checked against what they do later.")
         if cfg.question_examples:
             lines.append("Some question formats (illustrative, not exhaustive; replace X, Y, Z with player names):")
             lines += [f"- {q}" for q in cfg.question_examples]

@@ -159,7 +159,7 @@ def test_turn_limits(cfg):
 
 
 def test_all_ready_means_one_turn_each(cfg):
-    ready = lambda r: {"notes": "", "say": "ok", "ask_to": "", "ready_to_vote": True}
+    ready = lambda r: {"notes": "", "say": "ok", "ask_to": "", "question": "", "ready_to_vote": True}
     game, _ = play(cfg, Scripted(discuss=ready, vote=lambda r: {"vote": "approve"}))
     for acts, _ in attempts(game):
         assert sorted(a["player"] for a in acts) == sorted(game.names)
@@ -167,8 +167,9 @@ def test_all_ready_means_one_turn_each(cfg):
 
 def test_everyone_asking_one_player_cannot_silence_others(cfg):
     def ask_alice(r):
-        return {"notes": "", "say": "Alice, what do you think?", "ask_to": "Alice" if r["player"] != "Alice" else "",
-                "ready_to_vote": True}
+        asking = r["player"] != "Alice"
+        return {"notes": "", "say": "hm", "ask_to": "Alice" if asking else "",
+                "question": "Alice, what do you think?" if asking else "", "ready_to_vote": True}
     game, result = play(cfg, Scripted(discuss=ask_alice))
     assert result["winner"] in ("good", "evil")
     for acts, _ in attempts(game):
@@ -179,16 +180,20 @@ def test_everyone_asking_one_player_cannot_silence_others(cfg):
 def test_bad_ask_targets_are_ignored(cfg):
     def bad(r):
         return {"notes": "", "say": "hm", "ask_to": r["player"] if r["player"] != "Alice" else "Nobody",
-                "ready_to_vote": True}
+                "question": "?", "ready_to_vote": True}
     game, _ = play(cfg, Scripted(discuss=bad))
     assert not [e for e in game.events if e["type"] == "chat" and e.get("to")]
     assert any(e["type"] == "fallback" and "ignored ask_to" in e["error"] for e in game.events)
 
 
-def test_unanswered_question_is_recorded(cfg):
-    def mute_when_asked(r):
-        asked = "asked you directly" in r["prompt"]
-        return {"notes": "", "say": "" if asked else "Bob?", "ask_to": "" if asked else "Bob", "ready_to_vote": True}
-    game, _ = play(cfg, Scripted(discuss=lambda r: mute_when_asked(r) if r["player"] == "Bob" else
-                                 {"notes": "", "say": "Bob?", "ask_to": "Bob", "ready_to_vote": True}))
+def test_question_needs_text_and_unanswered_question_is_recorded(cfg):
+    def talk(r):
+        if r["player"] == "Bob":  # never says anything, even when asked
+            return {"notes": "", "say": "", "ask_to": "", "question": "", "ready_to_vote": True}
+        return {"notes": "", "say": "hm", "ask_to": "Bob", "question": "Bob?", "ready_to_vote": True}
+    game, _ = play(cfg, Scripted(discuss=talk))
     assert any(e["type"] == "chat" and e["text"] == "(no answer)" for e in game.events)
+
+    questionless = lambda r: {"notes": "", "say": "hm", "ask_to": "Bob", "question": " ", "ready_to_vote": True}
+    game, _ = play(cfg, Scripted(discuss=questionless))
+    assert not [e for e in game.events if e["type"] == "chat" and e.get("to")]

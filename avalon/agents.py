@@ -15,7 +15,8 @@ class RandomAgent:
         if kind == "discuss":
             others = [n for n in ctx["names"] if n != req["player"]]
             return {"notes": "random", "say": self.rng.choice(["Sounds fine to me.", "I'm not sure about this.", "Thoughts?"]),
-                    "ask_to": self.rng.choice(["", "", *others]), "ready_to_vote": self.rng.random() < 0.6}
+                    "ask_to": (to := self.rng.choice(["", "", *others])), "question": "Thoughts?" if to else "",
+                    "ready_to_vote": self.rng.random() < 0.6}
         if kind == "evil_chat":
             return {"say": self.rng.choice(["Sounds fine to me.", "I'm not sure about this.", ""]), "notes": "random"}
         if kind == "propose":

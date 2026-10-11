@@ -24,9 +24,9 @@ def render(ev, viewer=None):
         return f'{q} {me(ev["leader"])} proposes team {", ".join(map(me, ev["team"]))}: "{ev["say"]}"'
     if t == "chat":
         prefix = "(private evil channel) " if ev["vis"] == "evil" else ""
-        to = f' -> {me(ev["to"])}' if ev.get("to") else ""
         reply = f' (answering {me(ev["reply_to"])})' if ev.get("reply_to") else ""
-        return f'{q} {prefix}{me(ev["player"])}{to}{reply}: "{ev["text"]}"'.strip()
+        ask = f' [asks {me(ev["to"])}: "{ev["question"]}"]' if ev.get("to") else ""
+        return f'{q} {prefix}{me(ev["player"])}{reply}: "{ev["text"]}"{ask}'.strip()
     if t == "vote_result":
         yes = [me(k) for k, v in ev["votes"].items() if v == "approve"]
         no = [me(k) for k, v in ev["votes"].items() if v == "reject"]

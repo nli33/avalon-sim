@@ -15,6 +15,7 @@ Multi-agent Avalon (The Resistance) simulation. Every player is an LLM agent run
 ## Prompts
 - Prompts state rules, role facts, what the player knows, and game state. They do not contain tactical advice ("lie about X", "stay hidden", "fail sparingly"). Strategy is the agent's job; later we may add a store of learned strategies written by an agent that reviews games.
 - Beware hindsight when writing or learning from strategies: something obvious to an observer who knows every role may be non-obvious from one player's view. Judge play against what that player could know (the per-player `sees` info and the public transcript), not the final role reveal.
+- Discussion is engine-scheduled (`Game.discuss`): the asked player speaks next, everyone speaks at least once, per-player turn limit. Question formats shown to agents come from `discussion.question_examples` in the config so they can be ablated or replaced later; the prompt only states that a question should ask for something concrete (answerable and checkable), not what to ask.
 - Prompt wording that fixes a factual confusion (e.g. marking "(you)") is fine. Check effects by comparing logs from the same seed before and after.
 
 ## Notes

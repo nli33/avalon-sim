@@ -176,7 +176,7 @@ function renderCell(s, name) {
       const b = el('div', 'bubble ' + (ev.vis === 'evil' ? 'evil' : 'pub'));
       const label = ev.vis === 'evil' ? 'evil channel'
         : [ev.reply_to && `answers ${ev.reply_to}`, ev.to ? `asks ${ev.to}` : !ev.reply_to && 'says'].filter(Boolean).join(', ');
-      b.append(el('b', '', label), document.createTextNode(ev.text));
+      b.append(el('b', '', label), document.createTextNode(ev.text + (ev.to ? `${ev.text ? '\n\n' : ''}→ ${ev.to}: ${ev.question}` : '')));
       cell.append(b);
     } else if (ev.type === 'vote_result' && ev.votes[name]) {
       const b = el('div', 'bubble pub');

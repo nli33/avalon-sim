@@ -69,10 +69,11 @@ def test_assassination_phase_is_stated(game):
 
 
 def test_directed_chat_is_rendered_and_question_goes_to_asked_player(game):
-    game.emit("chat", "public", player="Alice", text="Bob, who would you pick?", to="Bob", reply_to=None, quest=1, attempt=1)
-    game.emit("chat", "public", player="Bob", text="Cara.", to=None, reply_to="Alice", quest=1, attempt=1)
+    game.emit("chat", "public", player="Alice", text="Fine by me.", to="Bob", question="Who would you pick?",
+              reply_to=None, quest=1, attempt=1)
+    game.emit("chat", "public", player="Bob", text="Cara.", to=None, question=None, reply_to="Alice", quest=1, attempt=1)
     _, prompt = build_view(game, game.players[1], "x")  # Bob
-    assert 'Alice -> Bob (you): "Bob, who would you pick?"' in prompt
+    assert 'Alice: "Fine by me." [asks Bob (you): "Who would you pick?"]' in prompt
     assert 'Bob (you) (answering Alice): "Cara."' in prompt
     bob = game.players[1]
     text = game.discussion_prompt(bob, ["Alice", "Bob"], {n: 0 for n in game.names}, ("Bob", "Alice", "who would you pick?"))
