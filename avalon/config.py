@@ -14,7 +14,7 @@ class Role(BaseModel):
     team: Literal["good", "evil"]
     sees: list[Sees] = []
     can_assassinate: bool = False
-    hint: str = ""
+    description: str = ""
 
 
 class PlayerCfg(BaseModel):

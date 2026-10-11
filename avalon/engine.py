@@ -16,12 +16,14 @@ class Player:
 
 def schema(kind, names=(), cards=("success", "fail")):
     s = lambda: {"type": "string"}
+    notes = {"type": "string", "description": "Private notes to your future self, in the first person. The other "
+             "players are everyone except you."}
     props = {
-        "discuss": {"say": s(), "notes": s()},
-        "evil_chat": {"say": s(), "notes": s()},
-        "propose": {"team": {"type": "array", "items": {"enum": list(names)}}, "say": s(), "notes": s()},
-        "vote": {"vote": {"enum": ["approve", "reject"]}, "notes": s()},
-        "quest": {"card": {"enum": list(cards)}, "notes": s()},
+        "discuss": {"say": s(), "notes": notes},
+        "evil_chat": {"say": s(), "notes": notes},
+        "propose": {"team": {"type": "array", "items": {"enum": list(names)}}, "say": s(), "notes": notes},
+        "vote": {"vote": {"enum": ["approve", "reject"]}, "notes": notes},
+        "quest": {"card": {"enum": list(cards)}, "notes": notes},
         "assassinate": {"target": {"enum": list(names)}, "reasoning": s()},
     }[kind]
     return {"type": "object", "properties": props, "required": list(props), "additionalProperties": False}
@@ -95,7 +97,7 @@ class Game:
         cfg, n = self.cfg, len(self.players)
         need = len(cfg.quest_sizes) // 2 + 1
         self.emit("setup", "hidden", seed=self.seed, leader=self.players[self.leader].name,
-                  players=[vars(p) for p in self.players])
+                  players=[{**vars(p), "sees": views.sees(self, p)} for p in self.players])
         while True:
             wins = sum(self.results)
             if wins == need:

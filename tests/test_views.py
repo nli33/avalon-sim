@@ -46,3 +46,23 @@ def test_private_notes_not_shared(game):
     game.notes[a.name] = "MYNOTES"
     assert "MYNOTES" in build_view(game, a, "x")[1]
     assert "MYNOTES" not in build_view(game, b, "x")[1]
+
+
+def test_prompt_marks_self_and_lists_unknowns(game):
+    game.emit("proposal", "public", quest=1, attempt=1, leader=game.names[0], team=game.names[:2], say="go")
+    for p in game.players:
+        system, prompt = build_view(game, p, "x")
+        assert f"{p.name} (you)" in system
+        assert sum("(you)" in line for line in prompt.splitlines()) == (p.name in game.names[:2])
+        known = {n for names in sees(game, p).values() for n in names}
+        unknown = [n for n in game.names if n != p.name and n not in known]
+        if unknown:
+            assert f"No information about: {', '.join(unknown)}" in system
+        assert p.name not in unknown
+
+
+def test_assassination_phase_is_stated(game):
+    game.results = [True, False, True, True]
+    game.quest = 4
+    _, prompt = build_view(game, game.players[0], "x")
+    assert "assassination phase" in prompt and "Quest 5 of 5" not in prompt
