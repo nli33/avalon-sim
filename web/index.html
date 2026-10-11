@@ -150,6 +150,7 @@ function privateText(a) {
   if (a.kind === 'vote' && o.vote) lines.push(`votes ${o.vote}`);
   if (a.kind === 'propose' && o.team) lines.push(`picks ${o.team.join(', ')}`);
   if (a.kind === 'assassinate' && o.target) lines.push(`targets ${o.target}`);
+  if (a.kind === 'discuss' && 'ready_to_vote' in o) lines.push(`ready to vote: ${o.ready_to_vote ? 'yes' : 'no'}`);
   const thought = o.notes || o.reasoning;
   if (thought) lines.push(thought);
   if (!Object.keys(o).length) lines.push('(agent call failed, engine used a default)');
@@ -173,7 +174,9 @@ function renderCell(s, name) {
       cell.append(b);
     } else if (ev.type === 'chat' && ev.player === name && (ev.vis !== 'evil' || showEvil())) {
       const b = el('div', 'bubble ' + (ev.vis === 'evil' ? 'evil' : 'pub'));
-      b.append(el('b', '', ev.vis === 'evil' ? 'evil channel' : 'says'), document.createTextNode(ev.text));
+      const label = ev.vis === 'evil' ? 'evil channel'
+        : [ev.reply_to && `answers ${ev.reply_to}`, ev.to ? `asks ${ev.to}` : !ev.reply_to && 'says'].filter(Boolean).join(', ');
+      b.append(el('b', '', label), document.createTextNode(ev.text));
       cell.append(b);
     } else if (ev.type === 'vote_result' && ev.votes[name]) {
       const b = el('div', 'bubble pub');
