@@ -1,5 +1,6 @@
 import argparse
 import asyncio
+import json
 import time
 from datetime import datetime
 from pathlib import Path
@@ -14,8 +15,10 @@ from .engine import Game
 console = Console(highlight=False)
 
 
-def show(ev):
+def show(ev, notes=True):
     t = ev["type"]
+    if t == "notes" and not notes:
+        return
     if t == "setup":
         console.print("[bold]Roles[/bold] (spectator view): " + ", ".join(f'{p["name"]}={p["role"]}' for p in ev["players"]))
     elif t == "notes":
@@ -39,7 +42,14 @@ def main():
     ap.add_argument("--model", help="override every player's model")
     ap.add_argument("--concurrency", type=int, default=3)
     ap.add_argument("--out", default="runs")
+    ap.add_argument("--replay", metavar="GAME.JSONL", help="print a saved game instead of running one")
+    ap.add_argument("--no-notes", action="store_true", help="with --replay: hide players' private notes")
     args = ap.parse_args()
+
+    if args.replay:
+        for line in open(args.replay):
+            show(json.loads(line), notes=not args.no_notes)
+        return
 
     cfg = load(args.config)
     if args.model:
