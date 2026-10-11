@@ -1,0 +1,56 @@
+import argparse
+import asyncio
+import time
+from datetime import datetime
+from pathlib import Path
+
+from rich.console import Console
+
+from . import views
+from .agents import ClaudeCLIAgent, RandomAgent
+from .config import load
+from .engine import Game
+
+console = Console(highlight=False)
+
+
+def show(ev):
+    t = ev["type"]
+    if t == "setup":
+        console.print("[bold]Roles[/bold] (spectator view): " + ", ".join(f'{p["name"]}={p["role"]}' for p in ev["players"]))
+    elif t == "notes":
+        console.print(f'  [dim]{ev["player"]} notes: {ev["notes"]}[/dim]')
+    elif t == "fallback":
+        console.print(f'  [red]fallback {ev["player"]} {ev["kind"]}: {ev["error"]}[/red]')
+    elif t == "assassination":
+        console.print(f'[bold magenta]{ev["assassin"]} assassinates {ev["target"]}: '
+                      f'{"correct" if ev["correct"] else "wrong"}[/bold magenta] [dim]{ev["reasoning"]}[/dim]')
+    elif t == "game_over":
+        console.print(f'[bold green]{ev["winner"].upper()} wins:[/bold green] {ev["reason"]}')
+    elif line := views.render(ev):
+        console.print(f"[yellow]{line}[/yellow]" if ev["vis"] == "evil" else line)
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--config", default="configs/classic5.json")
+    ap.add_argument("--seed", type=int, default=0)
+    ap.add_argument("--dry-run", action="store_true", help="random agents instead of claude")
+    ap.add_argument("--model", help="override every player's model")
+    ap.add_argument("--concurrency", type=int, default=3)
+    ap.add_argument("--out", default="runs")
+    args = ap.parse_args()
+
+    cfg = load(args.config)
+    if args.model:
+        cfg.default_model = args.model
+        for p in cfg.players:
+            p.model = None
+    agent = RandomAgent(args.seed) if args.dry_run else ClaudeCLIAgent(args.concurrency)
+    out = Path(args.out) / f"{datetime.now():%Y%m%d-%H%M%S}-seed{args.seed}"
+    out.mkdir(parents=True)
+    game = Game(cfg, agent, args.seed, out / "game.jsonl", show)
+    start = time.time()
+    result = asyncio.run(game.run())
+    cost = getattr(agent, "cost", 0)
+    console.print(f"{result['calls']} agent calls, {time.time() - start:.0f}s, list-price ${cost:.2f}, log: {out / 'game.jsonl'}")

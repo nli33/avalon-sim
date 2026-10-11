@@ -1,0 +1,44 @@
+{
+  "roles": {
+    "merlin": {
+      "team": "good",
+      "sees": [{"role": "morgana", "as": "evil"}, {"role": "assassin", "as": "evil"}],
+      "hint": "You know who is evil but must not make it obvious: if good wins three quests, the Assassin gets one guess at you. Steer the team subtly and avoid being too accurate."
+    },
+    "percival": {
+      "team": "good",
+      "sees": [{"role": "merlin", "as": "Merlin or Morgana"}, {"role": "morgana", "as": "Merlin or Morgana"}],
+      "hint": "One of the two players you see is Merlin and the other is Morgana, who is evil and is pretending to be Merlin. Work out which is which, and protect Merlin without exposing them."
+    },
+    "john": {
+      "team": "good",
+      "sees": [{"role": "percival", "as": "Percival"}],
+      "hint": "You are a loyal servant with no special power, but you know who Percival is. You can trust them, and you can draw attention away from Merlin."
+    },
+    "morgana": {
+      "team": "evil",
+      "sees": [{"role": "assassin", "as": "evil"}],
+      "hint": "Appear as Merlin to Percival so he trusts you instead of the real Merlin. You may lie. Play 'fail' on quests when it helps evil without being obvious."
+    },
+    "assassin": {
+      "team": "evil",
+      "sees": [{"role": "morgana", "as": "evil"}],
+      "can_assassinate": true,
+      "hint": "You may lie. If good wins three quests you get one guess at Merlin, so watch for who seems to know too much."
+    }
+  },
+  "assassination_target": "merlin",
+  "quest_sizes": [2, 3, 2, 3, 3],
+  "fails_required": [1, 1, 1, 1, 1],
+  "max_rejections": 5,
+  "discussion_rounds": 1,
+  "assassination_discussion_rounds": 2,
+  "default_model": "sonnet",
+  "players": [
+    {"name": "Alice"},
+    {"name": "Bob"},
+    {"name": "Cara"},
+    {"name": "Dev"},
+    {"name": "Eve"}
+  ]
+}
