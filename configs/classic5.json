@@ -34,10 +34,7 @@
   "discussion": {
     "min_turns": 1,
     "max_turns": 3,
-    "question_examples": [
-      "What do you think about a team containing [X, Y, Z]?",
-      "If this quest fails, who would you propose for the next team?"
-    ]
+    "question_examples": []
   },
   "assassination_discussion_rounds": 2,
   "default_model": "sonnet",

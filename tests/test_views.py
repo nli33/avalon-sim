@@ -83,6 +83,6 @@ def test_directed_chat_is_rendered_and_question_goes_to_asked_player(game):
 
 def test_question_examples_come_from_config(game):
     prompt = lambda: game.discussion_prompt(game.players[0], ["Alice"], {n: 0 for n in game.names}, None)
-    assert "who would you propose" in prompt()
-    game.cfg.discussion.question_examples = []
-    assert "who would you propose" not in prompt()
+    assert "question formats" not in prompt()  # the shipped config has none
+    game.cfg.discussion.question_examples = ["If this fails, who would you propose?"]
+    assert "- If this fails, who would you propose?" in prompt()
