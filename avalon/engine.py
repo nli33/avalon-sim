@@ -15,10 +15,12 @@ class Player:
 
 
 def schema(kind, names=(), cards=("success", "fail"), me=None):
-    """Output schema per decision. Private reasoning (notes) comes first so it is written before the decision."""
+    """Output schema per decision."""
     s = lambda: {"type": "string"}
-    notes = {"type": "string", "description": "Your private reasoning and memory; no other player sees it. Think here "
-             "before you decide. First person; the other players are everyone except you."}
+    # Wording matters: Sonnet 5.5 refuses (stop_reason "refusal") when a field asks it to write out its reasoning
+    # or to fill the field in before deciding. Keep this a memory note for the next turn.
+    notes = {"type": "string", "description": "Private notes to your future self, in the first person. The other "
+             "players are everyone except you."}
     props = {
         "discuss": {"notes": notes,
                     "say": {"type": "string", "description": "Your public message to the whole table (1-3 sentences). "
@@ -149,9 +151,8 @@ class Game:
                  f"{cfg.max_turns} turns."]
         if question:
             lines.append(f'{question[1]} asked you directly and it is your turn to answer: "{question[2]}"')
-        lines.append("Write your private reasoning in notes first. Then, in say, write your public message to the "
-                     "table (1-3 sentences; leave it empty to stay silent), including your answer if you were asked "
-                     "something. To ask one other player a question, put their name in ask_to and the question "
+        lines.append("In say, write your public message to the table (1-3 sentences; leave it empty to stay "
+                     "silent), including your answer if you were asked something. To ask one other player a question, put their name in ask_to and the question "
                      "itself in question only, not in say: they speak next and must answer it. You cannot ask a question once you are "
                      "past your turn limit. Set ready_to_vote to true when you are ready to vote. The discussion "
                      "ends when everyone has spoken and every player is ready to vote, or when turns run out.")

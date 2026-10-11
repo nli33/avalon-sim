@@ -71,4 +71,6 @@ def main():
     start = time.time()
     result = asyncio.run(game.run())
     cost = getattr(agent, "cost", 0)
-    console.print(f"{result['calls']} agent calls, {time.time() - start:.0f}s, list-price ${cost:.2f}, log: {out / 'game.jsonl'}")
+    fallbacks = sum(e["type"] == "fallback" for e in game.events)
+    console.print(f"{result['calls']} agent calls ({fallbacks} fallbacks), {time.time() - start:.0f}s, "
+                  f"list-price ${cost:.2f}, log: {out / 'game.jsonl'}")

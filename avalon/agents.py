@@ -56,6 +56,8 @@ class ClaudeCLIAgent:
             try:
                 env = json.loads(stdout)
                 self.cost += env.get("total_cost_usd") or 0
+                if env.get("stop_reason") == "refusal":
+                    raise RuntimeError(f"model refused ({env.get('stop_details')})")  # retrying won't change it
                 return env["structured_output"]
             except (ValueError, KeyError, TypeError):
                 err = f"bad output: {stdout[:200]!r} {stderr[:200]!r}"

@@ -197,3 +197,15 @@ def test_question_needs_text_and_unanswered_question_is_recorded(cfg):
     questionless = lambda r: {"notes": "", "say": "hm", "ask_to": "Bob", "question": " ", "ready_to_vote": True}
     game, _ = play(cfg, Scripted(discuss=questionless))
     assert not [e for e in game.events if e["type"] == "chat" and e.get("to")]
+
+
+def test_prompts_do_not_ask_for_written_out_reasoning(cfg):
+    """Sonnet 5.5 refuses requests whose schema or prompt asks it to write out its reasoning (see notes)."""
+    from avalon.engine import schema
+    game = Game(cfg, RandomAgent(), seed=0)
+    descriptions = []
+    for kind in ("discuss", "evil_chat", "propose", "vote", "quest", "assassinate"):
+        descriptions += [p.get("description", "") for p in schema(kind, game.names)["properties"].values()]
+    descriptions.append(game.discussion_prompt(game.players[0], game.names[:2], {n: 0 for n in game.names}, None))
+    for text in descriptions:
+        assert "reasoning" not in text.lower() and "think here" not in text.lower() and "before you decide" not in text.lower()
