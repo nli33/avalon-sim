@@ -7,7 +7,7 @@ from pathlib import Path
 
 from rich.console import Console
 
-from . import playbook, views
+from . import playbook, reflect, views
 from .agents import ClaudeCLIAgent, RandomAgent
 from .config import load
 from .engine import Game
@@ -48,6 +48,7 @@ def main():
     ap.add_argument("--serve", action="store_true", help="serve the web replay viewer for games in --out")
     ap.add_argument("--port", type=int, default=8000)
     ap.add_argument("--replay", metavar="GAME.JSONL", help="print a saved game instead of running one")
+    ap.add_argument("--reflect", metavar="GAME.JSONL", help="have every player write lessons from a saved game")
     ap.add_argument("--no-notes", action="store_true", help="with --replay: hide players' private notes")
     args = ap.parse_args()
 
@@ -62,6 +63,11 @@ def main():
         return
 
     cfg = load(args.config)
+    if args.reflect:
+        agent = ClaudeCLIAgent(args.concurrency)
+        paths = asyncio.run(reflect.reflect(args.reflect, cfg, agent, args.model or cfg.default_model))
+        console.print("\n".join(map(str, paths)) + f"\nlist-price ${agent.cost:.2f}")
+        return
     if args.model:
         cfg.default_model = args.model
         for p in cfg.players:
