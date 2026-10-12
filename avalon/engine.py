@@ -40,8 +40,9 @@ def schema(kind, names=(), cards=("success", "fail"), me=None):
 
 
 class Game:
-    def __init__(self, cfg, agent, seed=0, log_path=None, on_event=None):
+    def __init__(self, cfg, agent, seed=0, log_path=None, on_event=None, playbooks=None):
         self.cfg, self.agent, self.seed, self.on_event = cfg, agent, seed, on_event
+        self.playbooks = playbooks or {}  # team -> playbook (see playbook.load)
         self.rng = random.Random(seed)
         roles = list(cfg.roles)
         self.rng.shuffle(roles)
@@ -167,7 +168,7 @@ class Game:
         cfg, n = self.cfg, len(self.players)
         need = len(cfg.quest_sizes) // 2 + 1
         self.emit("setup", "hidden", seed=self.seed, leader=self.players[self.leader].name,
-                  players=[{**vars(p), "sees": views.sees(self, p)} for p in self.players])
+                  playbooks={t: pb["path"] for t, pb in self.playbooks.items()}, players=[{**vars(p), "sees": views.sees(self, p)} for p in self.players])
         while True:
             wins = sum(self.results)
             if wins == need:

@@ -7,7 +7,7 @@ from pathlib import Path
 
 from rich.console import Console
 
-from . import views
+from . import playbook, views
 from .agents import ClaudeCLIAgent, RandomAgent
 from .config import load
 from .engine import Game
@@ -42,6 +42,8 @@ def main():
     ap.add_argument("--dry-run", action="store_true", help="random agents instead of claude")
     ap.add_argument("--model", help="override every player's model")
     ap.add_argument("--concurrency", type=int, default=3)
+    ap.add_argument("--playbook", action="append", default=[], metavar="[TEAM=]DIR",
+                    help="playbook directory for a team (good/evil), or for both teams if TEAM= is omitted")
     ap.add_argument("--out", default="runs")
     ap.add_argument("--serve", action="store_true", help="serve the web replay viewer for games in --out")
     ap.add_argument("--port", type=int, default=8000)
@@ -64,10 +66,18 @@ def main():
         cfg.default_model = args.model
         for p in cfg.players:
             p.model = None
+    teams = {r.team for r in cfg.roles.values()}
+    playbooks = {}
+    for spec in args.playbook:
+        team, _, path = spec.partition("=")
+        if team not in teams:  # no TEAM= prefix: the whole spec is the path, for every team
+            team, path = None, spec
+        pb = playbook.load(path, cfg)
+        playbooks.update({t: pb for t in ([team] if team else teams)})
     agent = RandomAgent(args.seed) if args.dry_run else ClaudeCLIAgent(args.concurrency)
     out = Path(args.out) / f"{datetime.now():%Y%m%d-%H%M%S}-seed{args.seed}"
     out.mkdir(parents=True)
-    game = Game(cfg, agent, args.seed, out / "game.jsonl", show)
+    game = Game(cfg, agent, args.seed, out / "game.jsonl", show, playbooks)
     start = time.time()
     result = asyncio.run(game.run())
     cost = getattr(agent, "cost", 0)

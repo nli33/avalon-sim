@@ -2,6 +2,7 @@ import pytest
 
 from avalon.agents import RandomAgent
 from avalon.config import load
+from avalon import playbook
 from avalon.engine import Game
 from avalon.views import build_view, sees
 
@@ -86,3 +87,28 @@ def test_question_examples_come_from_config(game):
     assert "question formats" not in prompt()  # the shipped config has none
     game.cfg.discussion.question_examples = ["If this fails, who would you propose?"]
     assert "- If this fails, who would you propose?" in prompt()
+
+
+def test_playbook_goes_to_its_team_and_role_only(game):
+    pb = playbook.load("tests/playbooks/sample", game.cfg)
+    game.playbooks = {"good": pb}
+    for p in game.players:
+        system = build_view(game, p, "x")[0]
+        assert ("GENERAL-MARKER" in system) == (p.team == "good")
+        assert ("MERLIN-MARKER" in system) == (p.role == "merlin")
+        assert "ASSASSIN-MARKER" not in system  # evil has no playbook in this game
+
+
+def test_no_playbook_leaves_prompt_unchanged(game):
+    assert "Lessons" not in build_view(game, game.players[0], "x")[0]
+
+
+def test_playbook_rejects_player_names_and_unknown_roles(game, tmp_path):
+    (tmp_path / "general.md").write_text("Be wary of Alice.")
+    with pytest.raises(ValueError, match="Alice"):
+        playbook.load(tmp_path, game.cfg)
+    (tmp_path / "general.md").write_text("fine")
+    (tmp_path / "roles").mkdir()
+    (tmp_path / "roles" / "wizard.md").write_text("x")
+    with pytest.raises(ValueError, match="wizard"):
+        playbook.load(tmp_path, game.cfg)
