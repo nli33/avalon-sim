@@ -100,7 +100,7 @@ def test_playbook_goes_to_its_team_and_role_only(game):
 
 
 def test_no_playbook_leaves_prompt_unchanged(game):
-    assert "Lessons" not in build_view(game, game.players[0], "x")[0]
+    assert "Strategy notes" not in build_view(game, game.players[0], "x")[0]
 
 
 def test_playbook_rejects_player_names_and_unknown_roles(game, tmp_path):

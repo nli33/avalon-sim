@@ -51,7 +51,7 @@ def build_view(game, player, instruction):
     pb = game.playbooks.get(player.team, {"general": "", "roles": {}})
     lessons = "\n".join(t for t in (pb["general"], pb["roles"].get(player.role, "")) if t)
     if lessons:
-        lessons = ("\nLessons from past games, written by earlier players. They may be wrong or not apply; "
+        lessons = ("\nStrategy notes learned from past games. They may be wrong or not apply; "
                    f"use your own judgment:\n{lessons}\n")
 
     seats = ", ".join(n + " (you)" if n == player.name else n for n in game.names)
