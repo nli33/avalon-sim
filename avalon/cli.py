@@ -8,7 +8,7 @@ from pathlib import Path
 
 from rich.console import Console
 
-from . import evolve, playbook, reflect, views
+from . import learn, playbook, views
 from .agents import ClaudeCLIAgent, RandomAgent
 from .config import load
 from .engine import Game
@@ -49,11 +49,8 @@ def main():
     ap.add_argument("--serve", action="store_true", help="serve the web replay viewer for games in --out")
     ap.add_argument("--port", type=int, default=8000)
     ap.add_argument("--replay", metavar="GAME.JSONL", help="print a saved game instead of running one")
-    ap.add_argument("--reflect", metavar="GAME.JSONL", help="have every player write lessons from a saved game")
-    ap.add_argument("--evolve", metavar="NAME", help="write playbooks/NAME from --parent and the reflections of --games")
-    ap.add_argument("--parent", metavar="DIR", help="with --evolve: playbook to start from (default: empty)")
-    ap.add_argument("--games", nargs="+", default=[], metavar="DIR", help="with --evolve: game directories that have reflections")
-    ap.add_argument("--steer", metavar="FILE", help="with --evolve: guidance for the rewrite")
+    ap.add_argument("--no-learn", action="store_true", help="don't update the playbooks from this game")
+    ap.add_argument("--learner-model", default="sonnet", help="model that revises the playbooks after a game")
     ap.add_argument("--no-notes", action="store_true", help="with --replay: hide players' private notes")
     args = ap.parse_args()
 
@@ -68,17 +65,6 @@ def main():
         return
 
     cfg = load(args.config)
-    if args.reflect:
-        agent = ClaudeCLIAgent(args.concurrency)
-        paths = asyncio.run(reflect.reflect(args.reflect, cfg, agent, args.model or cfg.default_model))
-        console.print("\n".join(map(str, paths)) + f"\nlist-price ${agent.cost:.2f}")
-        return
-    if args.evolve:
-        agent = ClaudeCLIAgent(args.concurrency)
-        steer = Path(args.steer).read_text().strip() if args.steer else ""
-        out = asyncio.run(evolve.evolve(args.evolve, args.parent, args.games, steer, cfg, agent, args.model or cfg.default_model))
-        console.print(f"{out}\n{(out / 'CHANGELOG.md').read_text()}list-price ${agent.cost:.2f}")
-        return
     if args.seed is None:
         args.seed = random.SystemRandom().randrange(2**31)
     if args.model:
@@ -100,6 +86,11 @@ def main():
     start = time.time()
     result = asyncio.run(game.run())
     cost = getattr(agent, "cost", 0)
+    learned = []
+    if playbooks and not args.dry_run and not args.no_learn:
+        learned = asyncio.run(learn.learn(game, agent, args.learner_model, out.name))
     fallbacks = sum(e["type"] == "fallback" for e in game.events)
     console.print(f"seed {args.seed}, {result['calls']} agent calls ({fallbacks} fallbacks), {time.time() - start:.0f}s, "
                   f"list-price ${cost:.2f}, log: {out / 'game.jsonl'}")
+    for path, commit in learned:
+        console.print(f"playbook {path} updated to {commit} (learning cost ${agent.cost - cost:.2f})")

@@ -48,10 +48,9 @@ def build_view(game, player, instruction):
     need = len(cfg.quest_sizes) // 2 + 1
     assassin_role = next(r for r, c in cfg.roles.items() if c.can_assassinate)
 
-    pb = game.playbooks.get(player.team, {"general": "", "roles": {}})
-    lessons = "\n".join(t for t in (pb["general"], pb["roles"].get(player.role, "")) if t)
+    lessons = game.playbooks.get(player.team, {"roles": {}})["roles"].get(player.role, "")
     if lessons:
-        lessons = ("\nStrategy notes learned from past games. They may be wrong or not apply; "
+        lessons = ("\nStrategy notes for your role, learned from past games. They may be wrong or not apply; "
                    f"use your own judgment:\n{lessons}\n")
 
     seats = ", ".join(n + " (you)" if n == player.name else n for n in game.names)

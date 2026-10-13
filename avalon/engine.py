@@ -168,7 +168,7 @@ class Game:
         cfg, n = self.cfg, len(self.players)
         need = len(cfg.quest_sizes) // 2 + 1
         self.emit("setup", "hidden", seed=self.seed, leader=self.players[self.leader].name,
-                  playbooks={t: pb["path"] for t, pb in self.playbooks.items()}, players=[{**vars(p), "sees": views.sees(self, p)} for p in self.players])
+                  playbooks={t: {"path": pb["path"], "commit": pb["commit"]} for t, pb in self.playbooks.items()}, players=[{**vars(p), "sees": views.sees(self, p)} for p in self.players])
         while True:
             wins = sum(self.results)
             if wins == need:
