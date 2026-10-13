@@ -13,8 +13,8 @@ class FakeReflector:
 
     async def act(self, req):
         self.prompts[req["system"]] = req["prompt"]
-        return {"lessons": [{"kind": "sound_play", "quote": "proposes team", "lesson": "kept"},
-                            {"kind": "missed_signal", "quote": "NOT IN THE TRANSCRIPT", "lesson": "dropped"}]}
+        return {"lessons": [{"scope": "role", "kind": "sound_play", "quote": "proposes team", "lesson": "kept"},
+                            {"scope": "general", "kind": "missed_signal", "quote": "NOT IN THE TRANSCRIPT", "lesson": "dropped"}]}
 
 
 def played(tmp_path, seed=3):
@@ -38,10 +38,10 @@ def test_reflections_keep_only_quoted_lessons(tmp_path):
     cfg, path, game = played(tmp_path)
     agent = FakeReflector()
     paths = asyncio.run(reflect(path, cfg, agent, "haiku"))
-    assert sorted(p.name for p in paths) == sorted(f"{n}.md" for n in game.names)
+    assert sorted(p.name for p in paths) == sorted(f"{p.role}.md" for p in game.players)
     for p in paths:
         text = p.read_text()
         assert "1 lessons kept, 1 dropped" in text and "kept" in text and "NOT IN THE TRANSCRIPT" not in text
     # the reflecting player sees its own instructions, with its role, and the revealed outcome
-    prompt = agent.prompts[f"You are {game.players[0].name}, reviewing a game of Avalon you just played as {game.players[0].role}."]
+    prompt = agent.prompts[f"You are reviewing a game of Avalon in which you played {game.players[0].role}, to improve strategy for that role."]
     assert f"Your secret role: {game.players[0].role}" in prompt and "## Outcome" in prompt
