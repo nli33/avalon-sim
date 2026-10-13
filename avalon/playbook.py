@@ -23,11 +23,15 @@ def save(root, files, message):
 
 def load(path, cfg):
     """Read a playbook: one <role id>.md file per role. Seats are reshuffled between games, so the text must not
-    mention player names. Edits you made by hand are committed first, so a game always uses an exact commit."""
+    mention player names. Edits made by hand are committed first, so a game always uses an exact commit."""
     root = Path(path)
     if not root.is_dir():
         raise ValueError(f"playbook {path} is not a directory")
-    commit = save(root, {}, "Manual edits before a game") if (root / ".git").exists() else None
+    commit = None
+    if (root / ".git").exists():
+        edited = [line[3:] for line in git(root, "status", "--porcelain").stdout.splitlines()]
+        commit = save(root, {}, f"Manual edits to {', '.join(edited)}\n\nNot written by the learn step; committed "
+                                "automatically when the playbook was loaded for the next game.")
     roles = {}
     for f in sorted(root.glob("*.md")):
         if f.stem not in cfg.roles:

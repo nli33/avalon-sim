@@ -1,5 +1,6 @@
 import asyncio
 import re
+from pathlib import Path
 
 from . import playbook, views
 
@@ -39,9 +40,10 @@ def pov(events, me, team):
     return "\n".join(lines)
 
 
-async def learn(game, agent, model, run_name):
+async def learn(game, agent, model, run_dir):
     """After a game, every role whose team used a playbook revises its notes from this game alone. The edits are
-    committed in each playbook's own git repo. Returns [(playbook path, commit)]."""
+    committed in each playbook's own git repo, with the game and where the edit came from in the message.
+    Returns [(playbook path, commit)]."""
     over = next(e for e in game.events if e["type"] == "game_over")
     squash = lambda s: " ".join(s.split())
     names = re.compile(r"\b(" + "|".join(game.names) + r")\b")
@@ -75,11 +77,27 @@ Roles: {", ".join(f"{n}={r}" for n, r in over["roles"].items())}
             text = current
         return pb["path"], player.role, text, current, lines
 
-    edits = {}  # playbook path -> (files, message lines)
+    run = Path(run_dir)
+    edits = {}  # playbook path -> (files, edit lines, roles that were played)
     for path, role, text, current, lines in await asyncio.gather(*(one(p) for p in game.players if p.team in game.playbooks)):
-        files, notes = edits.setdefault(path, ({}, []))
+        files, notes, roles = edits.setdefault(path, ({}, [], []))
         if text and text != current:
             files[f"{role}.md"] = text
         notes += lines
-    return [(path, playbook.save(path, files, f"Update after {run_name} ({over['winner']} won)\n\n" + "\n".join(notes)))
-            for path, (files, notes) in edits.items()]
+        roles.append(role)
+    commits = []
+    for path, (files, notes, roles) in edits.items():
+        used = next(pb["commit"] for pb in game.playbooks.values() if pb["path"] == path)
+        message = f"""Learn from game {run.name}: {over['winner']} won, edited {', '.join(sorted(f[:-3] for f in files)) or 'nothing'}
+
+Game: {run.name} ({run / 'game.jsonl'})
+Seed: {game.seed}
+Result: {over['winner']} won, {over['reason']}
+Playbook used in this game: {used}
+Player model(s): {', '.join(sorted({p.model for p in game.players}))}; learner model: {model}
+Roles reviewed: {', '.join(sorted(roles))}
+Origin: post-game learn step (avalon/learn.py), one call per role, each seeing only that role's view of this game
+
+""" + "\n".join(notes)
+        commits.append((path, playbook.save(path, files, message)))
+    return commits

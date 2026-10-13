@@ -88,7 +88,7 @@ def main():
     cost = getattr(agent, "cost", 0)
     learned = []
     if playbooks and not args.dry_run and not args.no_learn:
-        learned = asyncio.run(learn.learn(game, agent, args.learner_model, out.name))
+        learned = asyncio.run(learn.learn(game, agent, args.learner_model, out))
     fallbacks = sum(e["type"] == "fallback" for e in game.events)
     console.print(f"seed {args.seed}, {result['calls']} agent calls ({fallbacks} fallbacks), {time.time() - start:.0f}s, "
                   f"list-price ${cost:.2f}, log: {out / 'game.jsonl'}")

@@ -45,11 +45,13 @@ def test_learning_commits_each_games_edit_to_the_playbook(tmp_path):
     playbook.save(root, {"merlin.md": "old merlin notes"}, "Initial")
     cfg, game = played(tmp_path, {t: playbook.load(root, cfg) for t in ("good", "evil")})
     agent = FakeLearner()
-    [(path, commit)] = asyncio.run(learn(game, agent, "sonnet", "run1"))
+    [(path, commit)] = asyncio.run(learn(game, agent, "sonnet", tmp_path / "runs" / "run1"))
     assert path == str(root) and commit
-    assert commits(root)[0] == "Update after run1 (" + next(e for e in game.events if e["type"] == "game_over")["winner"] + " won)"
+    winner = next(e for e in game.events if e["type"] == "game_over")["winner"]
+    assert commits(root)[0].startswith(f"Learn from game run1: {winner} won, edited ")
     assert sorted(f.name for f in root.glob("*.md")) == sorted(f"{r}.md" for r in cfg.roles)  # every role has a file now
     body = subprocess.run(["git", "-C", str(root), "log", "-1", "--format=%b"], capture_output=True, text=True).stdout
+    assert "Seed: 3" in body and "Playbook used in this game: " in body and "learner model: sonnet" in body
     assert "caution: kept" in body and "exploit: dropped" in body and "(quote not found)" in body
     # the editor saw the current notes through the instructions the player had, and the outcome
     prompt = agent.prompts[f"You maintain the strategy notes for the merlin role in Avalon (The Resistance), read by whoever plays merlin before every decision in future games."]
@@ -57,7 +59,7 @@ def test_learning_commits_each_games_edit_to_the_playbook(tmp_path):
     # nothing changed the second time: no new commit
     _, game2 = played(tmp_path, {t: playbook.load(root, cfg) for t in ("good", "evil")})
     n = len(commits(root))
-    asyncio.run(learn(game2, agent, "sonnet", "run2"))
+    asyncio.run(learn(game2, agent, "sonnet", tmp_path / "run2"))
     assert len(commits(root)) == n
 
 
@@ -67,7 +69,7 @@ def test_manual_edits_are_committed_before_a_game(tmp_path):
     playbook.save(root, {"merlin.md": "v1"}, "Initial")
     (root / "merlin.md").write_text("my edit\n")
     pb = playbook.load(root, cfg)
-    assert pb["roles"]["merlin"] == "my edit" and commits(root)[0] == "Manual edits before a game"
+    assert pb["roles"]["merlin"] == "my edit" and commits(root)[0] == "Manual edits to merlin.md"
 
 
 def test_notes_naming_players_are_not_applied(tmp_path):
@@ -75,6 +77,6 @@ def test_notes_naming_players_are_not_applied(tmp_path):
     root.mkdir()
     playbook.save(root, {"merlin.md": "old"}, "Initial")
     _, game = played(tmp_path, {t: playbook.load(root, cfg) for t in ("good", "evil")})
-    asyncio.run(learn(game, FakeLearner("watch Alice"), "sonnet", "run1"))
+    asyncio.run(learn(game, FakeLearner("watch Alice"), "sonnet", tmp_path / "run1"))
     assert (root / "merlin.md").read_text().strip() == "old"
     assert not any("Alice" in f.read_text() for f in root.glob("*.md"))
